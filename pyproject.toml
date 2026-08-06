@@ -2,5 +2,18 @@
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "qr-code-web"
+version = "0.1.0"
+description = "Web QR Code generator with FastAPI"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "qrcode[pil]",
+    "Pillow",
+]
+
 [tool.vercel]
 entrypoint = "main:app"
