@@ -3,13 +3,16 @@
   "builds": [
     {
       "src": "main.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "entrypoint": "main:app"
+      }
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/web_app.py"
+      "dest": "/main.py"
     }
   ]
 }
