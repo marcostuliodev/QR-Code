@@ -1,5 +1,7 @@
 import os
+import re
 import tempfile
+from urllib.parse import quote
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -8,6 +10,121 @@ from qr_studio import generate_qr
 
 app = FastAPI()
 app.mount('/static', StaticFiles(directory='.'), name='static')
+app.mount('/assets', StaticFiles(directory='assets'), name='assets')
+
+
+@app.middleware('http')
+async def add_cache_headers(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith('/assets/'):
+        response.headers['Cache-Control'] = 'public, max-age=2592000, immutable'
+    return response
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ICONS_DIR = os.path.join(BASE_DIR, 'assets', 'icons')
+
+
+def _clean_digits(value: str) -> str:
+    return re.sub(r'\D', '', value or '')
+
+
+def _clean_username(value: str) -> str:
+    return (value or '').strip().strip('@').strip()
+
+
+def _normalize_url(value: str) -> str:
+    url = (value or '').strip()
+    if not url:
+        raise ValueError('Informe o link.')
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+    return url
+
+
+def _escape_wifi(value: str) -> str:
+    return value.replace('\\', '\\\\').replace(';', '\\;').replace(',', '\\,').replace('"', '\\"').replace(':', '\\:')
+
+
+def format_qr_data(qr_type: str, fields: dict) -> str:
+    t = (qr_type or 'text').lower()
+
+    if t == 'link':
+        return _normalize_url(fields.get('url'))
+
+    if t == 'whatsapp':
+        number = _clean_digits(fields.get('whatsapp'))
+        if not number:
+            raise ValueError('Informe o número do WhatsApp.')
+        return f'https://wa.me/{number}'
+
+    if t == 'instagram':
+        user = _clean_username(fields.get('instagram'))
+        if not user:
+            raise ValueError('Informe o usuário do Instagram.')
+        return f'https://instagram.com/{user}'
+
+    if t == 'tiktok':
+        user = _clean_username(fields.get('tiktok'))
+        if not user:
+            raise ValueError('Informe o usuário do TikTok.')
+        return f'https://www.tiktok.com/@{user}'
+
+    if t == 'x':
+        user = _clean_username(fields.get('x'))
+        if not user:
+            raise ValueError('Informe o usuário do X (Twitter).')
+        return f'https://x.com/{user}'
+
+    if t == 'telegram':
+        user = _clean_username(fields.get('telegram'))
+        if not user:
+            raise ValueError('Informe o usuário do Telegram.')
+        return f'https://t.me/{user}'
+
+    if t in ('youtube', 'facebook', 'linkedin'):
+        return _normalize_url(fields.get(t))
+
+    if t == 'email':
+        address = (fields.get('email') or '').strip()
+        if not address:
+            raise ValueError('Informe o e-mail.')
+        subject = (fields.get('email_subject') or '').strip()
+        body = (fields.get('email_body') or '').strip()
+        parts = []
+        if subject:
+            parts.append('subject=' + quote(subject))
+        if body:
+            parts.append('body=' + quote(body))
+        return 'mailto:' + address + ('?' + '&'.join(parts) if parts else '')
+
+    if t == 'phone':
+        number = _clean_digits(fields.get('phone'))
+        if not number:
+            raise ValueError('Informe o número de telefone.')
+        return f'tel:+{number}'
+
+    if t == 'wifi':
+        ssid = (fields.get('wifi_ssid') or '').strip()
+        if not ssid:
+            raise ValueError('Informe o nome da rede Wi-Fi.')
+        password = (fields.get('wifi_password') or '').strip()
+        security = (fields.get('wifi_security') or 'WPA').upper()
+        hidden = (fields.get('wifi_hidden') or '').lower() in ('true', 'on', '1')
+        if security not in ('WPA', 'WEP', 'NOPASS'):
+            security = 'WPA'
+        if security == 'NOPASS':
+            return f"WIFI:T:nopass;S:{_escape_wifi(ssid)};;"
+        if not password:
+            raise ValueError('Informe a senha da rede Wi-Fi.')
+        parts = [f'WIFI:T:{security}', f'S:{_escape_wifi(ssid)}', f'P:{_escape_wifi(password)}']
+        if hidden:
+            parts.append('H:true')
+        return ';'.join(parts) + ';;'
+
+    text = (fields.get('text') or fields.get('data') or '').strip()
+    if not text:
+        raise ValueError('Informe o texto.')
+    return text
 
 
 @app.get('/', response_class=HTMLResponse)
@@ -17,7 +134,26 @@ def home():
 
 @app.post('/api/generate')
 async def api_generate(
-    data: str = Form(...),
+    data: str = Form(''),
+    qr_type: str = Form('text'),
+    url: str = Form(''),
+    whatsapp: str = Form(''),
+    instagram: str = Form(''),
+    tiktok: str = Form(''),
+    x: str = Form(''),
+    telegram: str = Form(''),
+    youtube: str = Form(''),
+    facebook: str = Form(''),
+    linkedin: str = Form(''),
+    email: str = Form(''),
+    email_subject: str = Form(''),
+    email_body: str = Form(''),
+    phone: str = Form(''),
+    wifi_ssid: str = Form(''),
+    wifi_password: str = Form(''),
+    wifi_security: str = Form('WPA'),
+    wifi_hidden: str = Form('false'),
+    text: str = Form(''),
     error: str = Form('M'),
     box_size: int = Form(10),
     border: int = Form(4),
@@ -27,6 +163,7 @@ async def api_generate(
     eye_color: Optional[str] = Form(None),
     icon: Optional[UploadFile] = File(None),
     frame: Optional[UploadFile] = File(None),
+    icon_preset: str = Form(''),
     icon_size: int = Form(20),
     icon_border: int = Form(6),
 ):
@@ -35,12 +172,42 @@ async def api_generate(
     out_tmp = None
 
     try:
+        fields = {
+            'url': url,
+            'whatsapp': whatsapp,
+            'instagram': instagram,
+            'tiktok': tiktok,
+            'x': x,
+            'telegram': telegram,
+            'youtube': youtube,
+            'facebook': facebook,
+            'linkedin': linkedin,
+            'email': email,
+            'email_subject': email_subject,
+            'email_body': email_body,
+            'phone': phone,
+            'wifi_ssid': wifi_ssid,
+            'wifi_password': wifi_password,
+            'wifi_security': wifi_security,
+            'wifi_hidden': wifi_hidden,
+            'text': text,
+            'data': data,
+        }
+        if data.strip():
+            final_data = data.strip()
+        else:
+            final_data = format_qr_data(qr_type, fields)
+
         if icon is not None:
             suffix = os.path.splitext(icon.filename)[1] or '.png'
             tmp_icon_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
             tmp_icon_file.write(await icon.read())
             tmp_icon_file.close()
             tmp_icon = tmp_icon_file.name
+        elif icon_preset:
+            preset_path = os.path.join(ICONS_DIR, f'{icon_preset}.png')
+            if os.path.exists(preset_path):
+                tmp_icon = preset_path
 
         if frame is not None:
             suffix = os.path.splitext(frame.filename)[1] or '.png'
@@ -53,7 +220,7 @@ async def api_generate(
         out_tmp.close()
 
         generate_qr(
-            data=data,
+            data=final_data,
             output_path=out_tmp.name,
             error=error,
             box_size=box_size,
@@ -71,13 +238,28 @@ async def api_generate(
         with open(out_tmp.name, 'rb') as f:
             content = f.read()
 
-        return Response(content=content, media_type='image/png')
+        return Response(
+            content=content,
+            media_type='image/png',
+            headers={'X-QR-Data': quote(final_data)},
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        for path in (tmp_icon, tmp_frame, out_tmp.name if out_tmp is not None else None):
-            if path and os.path.exists(path):
-                try:
-                    os.unlink(path)
-                except Exception:
-                    pass
+        if tmp_icon and os.path.exists(tmp_icon) and not tmp_icon.startswith(ICONS_DIR):
+            try:
+                os.unlink(tmp_icon)
+            except Exception:
+                pass
+        if tmp_frame and os.path.exists(tmp_frame):
+            try:
+                os.unlink(tmp_frame)
+            except Exception:
+                pass
+        if out_tmp is not None and os.path.exists(out_tmp.name):
+            try:
+                os.unlink(out_tmp.name)
+            except Exception:
+                pass

@@ -101,9 +101,16 @@ def generate_qr(
             mask = icon.split()[3]
             if icon_border > 0:
                 border_size = icon_border
-                bg = Image.new('RGBA', (w + border_size * 2, h + border_size * 2), (255, 255, 255, 255))
-                bg.paste(icon, (border_size, border_size), mask)
-                icon = bg
+                chip_w = w + border_size * 2
+                chip_h = h + border_size * 2
+                chip = Image.new('RGBA', (chip_w, chip_h), (255, 255, 255, 0))
+                radius = min(border_size * 3, chip_w // 2, chip_h // 2)
+                chip_draw = ImageDraw.Draw(chip)
+                chip_draw.rounded_rectangle(
+                    (0, 0, chip_w - 1, chip_h - 1), radius=radius, fill=(255, 255, 255, 255)
+                )
+                chip.paste(icon, (border_size, border_size), mask)
+                icon = chip
                 mask = icon.split()[3]
             pos = ((img_size - icon.size[0]) // 2, (img_size - icon.size[1]) // 2)
             img.paste(icon, pos, mask)

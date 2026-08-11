@@ -1,42 +1,100 @@
-# 📱 Gerador de QR Code Profissional
+# QR Studio
 
-Este é um projeto funcional que combina simplicidade e tecnologia para a geração e exportação de QR Codes. Desenvolvido para ser uma solução rápida na conversão de dados em códigos escaneáveis.
+Gerador de QR Codes simples e profissional. Escolha o tipo de conteúdo, informe apenas o que importa e o gerador monta a formatação correta automaticamente — com pré-visualização ao vivo, ícones de marca e download em PNG.
 
----
+## Funcionalidades
 
-## 🚀 Sobre o Projeto
+- **Tipos de QR Code**: Link, WhatsApp, Instagram, TikTok, X (Twitter), Telegram, YouTube, Facebook, LinkedIn, E-mail, Telefone, Wi-Fi e Texto.
+- **Campos inteligentes**:
+  - WhatsApp → só o número (DDI incluído, ex.: `5511999999999`)
+  - Instagram/TikTok/X/Telegram → só o nome de usuário
+  - Wi-Fi → nome da rede (SSID), senha, segurança e rede oculta; a formatação `WIFI:T:...` é gerada sozinha
+  - E-mail → endereço com assunto e mensagem opcionais
+- **Ícone central**: 14 ícones de marca/genericos prontos ou upload do seu logo (PNG), com chip branco arredondado.
+- **Personalização**: cor dos módulos, fundo e olhos, formato quadrado/círculo, correção de erro, tamanho do módulo e borda.
+- **Pré-visualização ao vivo** com atualização automática (debounce) e botão manual **Gerar QR Code**.
+- **Download em PNG** com nome de arquivo personalizável.
+- **Resiliente**: se a API não estiver disponível (ex.: abrir o `index.html` direto no navegador), o QR é gerado **no próprio navegador** via Canvas, mantendo o download funcionando.
 
-O **QR-Code** é uma ferramenta versátil que permite converter instantaneamente URLs, textos ou informações de contato em códigos QR. Diferente de geradores simples, este projeto foi estruturado para oferecer uma experiência completa, permitindo que o usuário não apenas visualize, mas também **baixe o código gerado** para uso imediato em materiais impressos ou digitais.
+## Tecnologias
 
-Este repositório demonstra minha capacidade de integrar **Python** com tecnologias web para criar ferramentas de utilidade real.
+- **Backend**: Python, FastAPI, `qrcode[pil]` + Pillow
+- **Frontend**: HTML/CSS/JS puros (sem framework), ícones SVG inline (Lucide + Simple Icons)
+- **Deploy**: Vercel (`@vercel/python`)
 
-## 🛠️ Tecnologias Utilizadas
+## Como executar localmente
 
-- **Python:** Responsável pela lógica de processamento e geração robusta do código.
-- **JavaScript:** Manipulação dinâmica da interface e interação em tempo real.
-- **HTML5 & CSS3:** Estrutura e design responsivo, garantindo que a ferramenta funcione perfeitamente em celulares e desktops.
+Pré-requisitos: Python 3.11+.
 
-## ✨ Funcionalidades
+```bash
+# 1. Criar e ativar o ambiente virtual (opcional, recomendado)
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+source .venv/bin/activate     # Linux/macOS
 
-- [x] **Geração Instantânea:** Digite e veja o QR Code aparecer na hora.
-- [x] **Download Disponível:** Exporte o código gerado diretamente para o seu dispositivo.
-- [x] **Design Responsivo:** Interface limpa, moderna e fácil de usar.
-- [x] **Suporte a Múltiplos Dados:** Compatível com links, textos e identificadores.
+# 2. Instalar dependências
+pip install -r requirements.txt
 
-## 🔧 Como rodar o projeto
+# 3. Subir o servidor
+uvicorn web_app:app --reload
+```
 
-1. Clone o repositório:
-   ```bash
-   git clone https://github.com/marcostuliodev/QR-Code.git
-Instale as dependências necessárias (caso utilize bibliotecas Python específicas):
-Execute a aplicação e abra no seu navegador.
+Abra [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
-## 💻 Link de acesso direto
-[QR Code Generator](https://qr.marcostuliogc.com.br)
+> **Sem o servidor?** Você ainda pode abrir o `index.html` diretamente no navegador
+> (duplo clique): o QR Code será gerado client-side. Para o modo completo
+> (ícones de marca e estilos avançados servidos pelo backend), use o servidor.
 
-👨‍💻 Autor
-Desenvolvido por Marcos Túlio – Desenvolvedor Full-Stack focado em soluções escaláveis com React.js, Node.js e Python.
-💼 LinkedIn: [in/marcostuliodev](https://www.linkedin.com/in/marcostuliodev/)
-🌐 Portfólio: [marcostuliogc.com.br](https://marcostuliogc.com.br/)
-📱 WhatsApp: [Fale comigo](https://wa.me/5531997451906)
-#opentowork 🟢
+## Deploy no Vercel
+
+O projeto já inclui `vercel.json`, `main.py` e `requirements.txt`. Basta conectar o repositório na Vercel; a entrada é `main:app`.
+
+## API
+
+### `POST /api/generate`
+
+Gera o QR Code e retorna a imagem PNG.
+
+**Parâmetros (multipart/form-data)**
+
+| Parâmetro | Descrição |
+| --- | --- |
+| `qr_type` | `link`, `whatsapp`, `instagram`, `tiktok`, `x`, `telegram`, `youtube`, `facebook`, `linkedin`, `email`, `phone`, `wifi` ou `text` (padrão: `text`) |
+| `url` / `whatsapp` / `instagram` / `tiktok` / `x` / `telegram` / `youtube` / `facebook` / `linkedin` | Valor principal de cada tipo |
+| `email`, `email_subject`, `email_body` | E-mail com assunto/mensagem opcionais |
+| `phone` | Número para `tel:` |
+| `wifi_ssid`, `wifi_password`, `wifi_security` (`WPA`/`WEP`/`NOPASS`), `wifi_hidden` | Rede Wi-Fi |
+| `text` | Texto livre |
+| `error` | `L`, `M`, `Q` ou `H` (padrão `M`) |
+| `box_size`, `border` | Tamanho do módulo e borda (padrões 10 e 4) |
+| `module_color`, `bg_color`, `eye_color` | Cores em HEX |
+| `shape` | `square` ou `circle` |
+| `icon_preset` | Nome do ícone embutido (ex.: `whatsapp`, `instagram`, `wifi`, `globe`) |
+| `icon`, `frame` | Upload de logo/moldura PNG (opcional) |
+| `icon_size`, `icon_border` | Tamanho (%) e borda do ícone |
+
+**Resposta**: `image/png` com o cabeçalho `X-QR-Data` contendo o conteúdo final (URL-encoded).
+
+**Erros**: `400` com `detail` quando um campo obrigatório está vazio; `500` em falhas internas.
+
+## Estrutura
+
+```
+├── index.html          # Frontend completo (single page)
+├── web_app.py          # API FastAPI (rotas, formatação por tipo, uploads)
+├── qr_studio.py        # Geração da imagem do QR (Pillow)
+├── main.py             # Entrypoint do Vercel
+├── api/index.py        # Handler alternativo para Vercel
+├── assets/
+│   ├── icons.js        # Sprite SVG inline (ícones da interface)
+│   ├── qrcode.min.js   # Lib QR client-side (fallback no navegador)
+│   └── icons/          # PNGs dos ícones embutidos no QR
+├── requirements.txt
+└── vercel.json
+```
+
+## Licença dos ícones
+
+- **Lucide** — licença ISC
+- **Simple Icons** — licença CC0 (domínio público)
+- **qrcode-generator** — licença MIT
