@@ -17,3 +17,6 @@ dependencies = [
 
 [tool.vercel]
 entrypoint = "main:app"
+
+[tool.uv]
+package = false

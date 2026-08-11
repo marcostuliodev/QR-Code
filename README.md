@@ -20,7 +20,7 @@ Gerador de QR Codes simples e profissional. Escolha o tipo de conteúdo, informe
 
 - **Backend**: Python, FastAPI, `qrcode[pil]` + Pillow
 - **Frontend**: HTML/CSS/JS puros (sem framework), ícones SVG inline (Lucide + Simple Icons)
-- **Deploy**: Vercel (`@vercel/python`)
+- **Deploy**: Vercel (runtime Python via `pyproject.toml` + `uv`)
 
 ## Como executar localmente
 
@@ -47,7 +47,13 @@ Abra [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
 ## Deploy no Vercel
 
-O projeto já inclui `vercel.json`, `main.py` e `requirements.txt`. Basta conectar o repositório na Vercel; a entrada é `main:app`.
+O projeto usa o runtime Python moderno da Vercel, detectado via `pyproject.toml` + `uv.lock`. Basta conectar o repositório na Vercel — não é preciso configurar nada manualmente:
+
+- Entrada: `main:app`, definida em `[tool.vercel] entrypoint` no `pyproject.toml`.
+- Build: a Vercel roda `uv sync --locked` a partir do `uv.lock` (já incluído no repositório).
+- `[tool.uv] package = false` informa que o projeto é uma aplicação (não um pacote Python), evitando o build de wheel.
+
+Para atualizar o lockfile após mudar dependências: `uv lock`.
 
 ## API
 
@@ -83,13 +89,14 @@ Gera o QR Code e retorna a imagem PNG.
 ├── index.html          # Frontend completo (single page)
 ├── web_app.py          # API FastAPI (rotas, formatação por tipo, uploads)
 ├── qr_studio.py        # Geração da imagem do QR (Pillow)
-├── main.py             # Entrypoint do Vercel
-├── api/index.py        # Handler alternativo para Vercel
+├── main.py             # Entrypoint do Vercel (main:app)
 ├── assets/
 │   ├── icons.js        # Sprite SVG inline (ícones da interface)
 │   ├── qrcode.min.js   # Lib QR client-side (fallback no navegador)
 │   └── icons/          # PNGs dos ícones embutidos no QR
-├── requirements.txt
+├── pyproject.toml      # Metadados + dependências (uv) + entrypoint Vercel
+├── uv.lock             # Lockfile gerado por `uv lock`
+├── requirements.txt    # Alternativa para pip
 └── vercel.json
 ```
 
