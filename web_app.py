@@ -9,8 +9,17 @@ from typing import Optional
 from qr_studio import generate_qr
 
 app = FastAPI()
-app.mount('/static', StaticFiles(directory='.'), name='static')
 app.mount('/assets', StaticFiles(directory='assets'), name='assets')
+
+
+@app.middleware('http')
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    return response
 
 
 @app.middleware('http')
@@ -199,6 +208,11 @@ def format_qr_data(qr_type: str, fields: dict) -> str:
 @app.get('/', response_class=HTMLResponse)
 def home():
     return FileResponse('index.html')
+
+
+@app.get('/robots.txt', response_class=HTMLResponse)
+def robots():
+    return FileResponse('robots.txt')
 
 
 @app.post('/api/generate')
