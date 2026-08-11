@@ -45,6 +45,72 @@ def _escape_wifi(value: str) -> str:
     return value.replace('\\', '\\\\').replace(';', '\\;').replace(',', '\\,').replace('"', '\\"').replace(':', '\\:')
 
 
+_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+_UUID_RE = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+_PIX_MERCHANT_NAME = 'PIX'
+_PIX_MERCHANT_CITY = 'BR'
+
+
+def _crc16_ccitt(data: str) -> str:
+    crc = 0xFFFF
+    for byte in data.encode('utf-8'):
+        crc ^= byte << 8
+        for _ in range(8):
+            if crc & 0x8000:
+                crc = ((crc << 1) ^ 0x1021) & 0xFFFF
+            else:
+                crc = (crc << 1) & 0xFFFF
+    return f'{crc:04X}'
+
+
+def _emv_field(fid: str, value: str) -> str:
+    return f'{fid}{len(value):02d}{value}'
+
+
+def _normalize_pix_key(value: str) -> str:
+    key = (value or '').strip()
+    if not key:
+        raise ValueError('Informe a chave Pix.')
+    if '@' in key:
+        key = key.lower()
+        if not _EMAIL_RE.match(key) or len(key) > 77:
+            raise ValueError('Chave Pix de e-mail inválida.')
+        return key
+    if _UUID_RE.match(key):
+        return key.lower()
+    if key.startswith('+'):
+        digits = re.sub(r'\D', '', key)
+        if not digits:
+            raise ValueError('Chave Pix de telefone inválida.')
+        if re.fullmatch(r'[1-9][0-9]{1,14}', digits):
+            return '+' + digits
+        raise ValueError('Chave Pix de telefone inválida. Use o formato +55DDDNÚMERO.')
+    compact = re.sub(r'[.\-/\s()]', '', key)
+    if re.fullmatch(r'[0-9]{11}', compact):
+        return compact
+    if re.fullmatch(r'[a-z0-9]{14}', compact, re.IGNORECASE):
+        return compact
+    if re.fullmatch(r'55[0-9]{10,11}', compact):
+        return '+' + compact
+    raise ValueError('Chave Pix inválida. Use e-mail, CPF, CNPJ, telefone (+55...) ou chave aleatória.')
+
+
+def build_pix_payload(pix_key: str) -> str:
+    key = _normalize_pix_key(pix_key)
+    merchant_info = _emv_field('00', 'br.gov.bcb.pix') + _emv_field('01', key)
+    payload = (
+        _emv_field('00', '01')
+        + _emv_field('26', merchant_info)
+        + _emv_field('52', '0000')
+        + _emv_field('53', '986')
+        + _emv_field('58', 'BR')
+        + _emv_field('59', _PIX_MERCHANT_NAME)
+        + _emv_field('60', _PIX_MERCHANT_CITY)
+        + _emv_field('62', _emv_field('05', '***'))
+    )
+    return payload + '6304' + _crc16_ccitt(payload + '6304')
+
+
 def format_qr_data(qr_type: str, fields: dict) -> str:
     t = (qr_type or 'text').lower()
 
@@ -103,6 +169,9 @@ def format_qr_data(qr_type: str, fields: dict) -> str:
             raise ValueError('Informe o número de telefone.')
         return f'tel:+{number}'
 
+    if t == 'pix':
+        return build_pix_payload(fields.get('pix_key'))
+
     if t == 'wifi':
         ssid = (fields.get('wifi_ssid') or '').strip()
         if not ssid:
@@ -149,6 +218,7 @@ async def api_generate(
     email_subject: str = Form(''),
     email_body: str = Form(''),
     phone: str = Form(''),
+    pix_key: str = Form(''),
     wifi_ssid: str = Form(''),
     wifi_password: str = Form(''),
     wifi_security: str = Form('WPA'),
@@ -186,6 +256,7 @@ async def api_generate(
             'email_subject': email_subject,
             'email_body': email_body,
             'phone': phone,
+            'pix_key': pix_key,
             'wifi_ssid': wifi_ssid,
             'wifi_password': wifi_password,
             'wifi_security': wifi_security,

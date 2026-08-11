@@ -4,7 +4,8 @@ Gerador de QR Codes simples e profissional. Escolha o tipo de conteúdo, informe
 
 ## Funcionalidades
 
-- **Tipos de QR Code**: Link, WhatsApp, Instagram, TikTok, X (Twitter), Telegram, YouTube, Facebook, LinkedIn, E-mail, Telefone, Wi-Fi e Texto.
+- **Tipos de QR Code**: Link, WhatsApp, Instagram, TikTok, X (Twitter), Telegram, YouTube, Facebook, LinkedIn, E-mail, Telefone, Pix, Wi-Fi e Texto.
+- **Pix**: basta colar a chave (e-mail, CPF, CNPJ, telefone com +55 ou chave aleatória) — o payload é montado no padrão oficial **BR Code (EMV)** do Banco Central, com CRC-16, e gera o "Pix Copia e Cola" funcional em qualquer app bancário.
 - **Campos inteligentes**:
   - WhatsApp → só o número (DDI incluído, ex.: `5511999999999`)
   - Instagram/TikTok/X/Telegram → só o nome de usuário
@@ -20,6 +21,7 @@ Gerador de QR Codes simples e profissional. Escolha o tipo de conteúdo, informe
 
 - **Backend**: Python, FastAPI, `qrcode[pil]` + Pillow
 - **Frontend**: HTML/CSS/JS puros (sem framework), ícones SVG inline (Lucide + Simple Icons)
+- **Pix**: padrão BR Code (EMVCo QRCPS-MPM) do Banco Central, chave no formato DICT e CRC-16/CCITT-FALSE
 - **Deploy**: Vercel (runtime Python via `pyproject.toml` + `uv`)
 
 ## Como executar localmente
@@ -65,10 +67,11 @@ Gera o QR Code e retorna a imagem PNG.
 
 | Parâmetro | Descrição |
 | --- | --- |
-| `qr_type` | `link`, `whatsapp`, `instagram`, `tiktok`, `x`, `telegram`, `youtube`, `facebook`, `linkedin`, `email`, `phone`, `wifi` ou `text` (padrão: `text`) |
+| `qr_type` | `link`, `whatsapp`, `instagram`, `tiktok`, `x`, `telegram`, `youtube`, `facebook`, `linkedin`, `email`, `phone`, `pix`, `wifi` ou `text` (padrão: `text`) |
 | `url` / `whatsapp` / `instagram` / `tiktok` / `x` / `telegram` / `youtube` / `facebook` / `linkedin` | Valor principal de cada tipo |
 | `email`, `email_subject`, `email_body` | E-mail com assunto/mensagem opcionais |
 | `phone` | Número para `tel:` |
+| `pix_key` | Chave Pix (e-mail, CPF, CNPJ, telefone ou aleatória) — gera payload BR Code |
 | `wifi_ssid`, `wifi_password`, `wifi_security` (`WPA`/`WEP`/`NOPASS`), `wifi_hidden` | Rede Wi-Fi |
 | `text` | Texto livre |
 | `error` | `L`, `M`, `Q` ou `H` (padrão `M`) |

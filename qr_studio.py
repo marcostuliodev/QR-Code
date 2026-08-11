@@ -4,6 +4,10 @@ from PIL import Image, ImageDraw
 import qrcode
 from qrcode import constants
 
+Image.MAX_IMAGE_PIXELS = 16_000_000
+
+MAX_IMAGE_SIDE = 6000
+
 ERROR_MAP = {
     'L': constants.ERROR_CORRECT_L,
     'M': constants.ERROR_CORRECT_M,
@@ -48,6 +52,8 @@ def generate_qr(
     matrix = qr.get_matrix()
     modules_count = len(matrix)
     img_size = (modules_count + 2 * border) * box_size
+    if img_size > MAX_IMAGE_SIDE:
+        raise ValueError('Tamanho máximo de imagem excedido.')
 
     img = Image.new('RGBA', (img_size, img_size), _ensure_color(background))
     draw = ImageDraw.Draw(img)

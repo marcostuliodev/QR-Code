@@ -484,6 +484,13 @@
           { name: 'phone', label: 'Número de telefone', type: 'tel', placeholder: '5511999999999', hint: 'O QR Code vai iniciar a ligação no celular.' },
         ],
       },
+      pix: {
+        title: 'Pix', icon: 'banknote', color: '#16A34A', preset: 'pix',
+        hint: 'Gera o "Pix Copia e Cola" no padrão oficial BR Code — só cole a sua chave. Nome e cidade ficam genéricos no QR, pois o app do banco mostra o nome real pelo DICT.',
+        fields: [
+          { name: 'pix_key', label: 'Chave Pix', type: 'text', placeholder: 'fulano@email.com', hint: 'Cole a chave como está cadastrada: e-mail, CPF (11 dígitos), CNPJ (14), telefone com +55 (ex.: +5511999999999) ou chave aleatória.' },
+        ],
+      },
       wifi: {
         title: 'Wi-Fi', icon: 'wifi', color: '#0ea5e9', preset: 'wifi',
         hint: 'O gerador monta a formatação correta automaticamente.',
@@ -506,7 +513,7 @@
       },
     };
 
-    const TYPE_ORDER = ['link', 'whatsapp', 'instagram', 'tiktok', 'x', 'telegram', 'youtube', 'facebook', 'linkedin', 'email', 'phone', 'wifi', 'text'];
+    const TYPE_ORDER = ['link', 'whatsapp', 'instagram', 'tiktok', 'x', 'telegram', 'youtube', 'facebook', 'linkedin', 'email', 'phone', 'pix', 'wifi', 'text'];
 
     const PRESETS = [
       { id: 'none', label: 'Sem ícone' },
@@ -521,6 +528,7 @@
       { id: 'gmail', label: 'E-mail' },
       { id: 'globe', label: 'Link' },
       { id: 'phone', label: 'Telefone' },
+      { id: 'pix', label: 'Pix' },
       { id: 'wifi', label: 'Wi-Fi' },
       { id: 'type', label: 'Texto' },
     ];
@@ -728,8 +736,61 @@
     const PRESET_COLORS = {
       whatsapp: '#25D366', instagram: '#E4405F', tiktok: '#111111', x: '#0F1419',
       telegram: '#26A5E4', youtube: '#FF0000', facebook: '#1877F2', linkedin: '#0A66C2',
-      gmail: '#EA4335', globe: '#4F46E5', phone: '#4F46E5', wifi: '#4F46E5', type: '#4F46E5', mail: '#4F46E5',
+      gmail: '#EA4335', globe: '#4F46E5', phone: '#4F46E5', pix: '#16A34A', wifi: '#4F46E5', type: '#4F46E5', mail: '#4F46E5',
     };
+
+    /* ---------- PIX (BR Code / EMV) client-side ---------- */
+    function crc16ccitt(str) {
+      let crc = 0xFFFF;
+      for (let i = 0; i < str.length; i++) {
+        crc ^= str.charCodeAt(i) << 8;
+        for (let j = 0; j < 8; j++) {
+          crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+        }
+      }
+      return crc.toString(16).toUpperCase().padStart(4, '0');
+    }
+
+    function emvField(id, value) {
+      const v = String(value);
+      return id + String(v.length).padStart(2, '0') + v;
+    }
+
+    function normalizePixKey(value) {
+      let k = (value || '').trim();
+      if (!k) throw new Error('Informe a chave Pix.');
+      if (k.includes('@')) {
+        k = k.toLowerCase();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(k) || k.length > 77) throw new Error('Chave Pix de e-mail inválida.');
+        return k;
+      }
+      if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(k)) return k.toLowerCase();
+      if (k.startsWith('+')) {
+        const digits = k.replace(/\D/g, '');
+        if (!digits || !/^[1-9][0-9]{1,14}$/.test(digits)) throw new Error('Chave Pix de telefone inválida. Use o formato +55DDDNÚMERO.');
+        return '+' + digits;
+      }
+      const compact = k.replace(/[.\-/\s()]/g, '');
+      if (/^[0-9]{11}$/.test(compact)) return compact;
+      if (/^[a-z0-9]{14}$/i.test(compact)) return compact;
+      if (/^55[0-9]{10,11}$/.test(compact)) return '+' + compact;
+      throw new Error('Chave Pix inválida. Use e-mail, CPF, CNPJ, telefone (+55...) ou chave aleatória.');
+    }
+
+    function buildPixPayload(value) {
+      const key = normalizePixKey(value);
+      const merchantInfo = emvField('00', 'br.gov.bcb.pix') + emvField('01', key);
+      const payload =
+        emvField('00', '01') +
+        emvField('26', merchantInfo) +
+        emvField('52', '0000') +
+        emvField('53', '986') +
+        emvField('58', 'BR') +
+        emvField('59', 'PIX') +
+        emvField('60', 'BR') +
+        emvField('62', emvField('05', '***'));
+      return payload + '6304' + crc16ccitt(payload + '6304');
+    }
 
     function formatDataClient(fd) {
       const t = fd.get('qr_type');
@@ -789,6 +850,7 @@
           if (!n) throw new Error('Informe o número de telefone.');
           return 'tel:+' + n;
         }
+        case 'pix': return buildPixPayload(fd.get('pix_key'));
         case 'wifi': {
           const ssid = clean(fd.get('wifi_ssid'));
           if (!ssid) throw new Error('Informe o nome da rede Wi-Fi.');
@@ -884,6 +946,7 @@
       let key = preset;
       if (key === 'gmail') key = 'mail';
       if (key === 'type') key = 'text';
+      if (key === 'pix') key = 'banknote';
       let inner = icons.fill[key] || icons.stroke[key];
       if (!inner) return null;
       const filled = !!icons.fill[key];
